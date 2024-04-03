@@ -343,3 +343,4 @@ def draw(image_filename,
                    background_color=background_color)
         
     return result_image
+    
