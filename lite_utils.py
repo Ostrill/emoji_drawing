@@ -52,7 +52,7 @@ def create_emoji_dict(emojis,
         # Вывод прогресса
         if disp:
             progress = round(i / len(emojis) * 100, 2)
-            print(f'\rПостроение словаря: {progress:>6}% ({i}/{len(emojis)})', end='')
+            print(f'\rПостроение словаря: {progress}%', end='')
 
     if disp:
         print()
@@ -153,7 +153,7 @@ def draw_emojis(filename, width, emoji_dict, disp=True):
                 total_px = h_quantity * w_quantity
                 current_px = i * w_quantity + j + 1
                 progress = round(current_px / total_px * 100, 2)
-                print(f'\rРисование: {progress:>6}%', end='')
+                print(f'\rРисование: {progress}%', end='')
     if disp:
         print()
 
@@ -212,23 +212,23 @@ def save_as_image(emoji_array, image_name, emoji_resolution,
     img_h, img_w = np.array(emoji_array.shape) * emoji_resolution
     
     # Создание картинки из смайликов
-    with Image.new('RGB', (img_h, img_w), background_color) as image:
+    with Image.new('RGB', (img_w, img_h), background_color) as image:
         # Шрифт для отображения смайликов
         font = ImageFont.truetype('fonts/arial.ttf', emoji_resolution)
         # Рисование смайликов на картинке
         with Pilmoji(image) as pilmoji:
-            for i in range(emojis_h):
-                for j in range(emojis_w):
+            for i in range(emojis_w):
+                for j in range(emojis_h):
                     # Индексы пикселей в итоговой картинке
-                    h, w = i * emoji_resolution, j * emoji_resolution
-                    pilmoji.text((w, h), emoji_array[i, j], font=font)
+                    w, h = i * emoji_resolution, j * emoji_resolution
+                    pilmoji.text((w, h), emoji_array[j, i], font=font)
                     
                     # Вывод прогресса
                     if disp:
                         total_px = emojis_h * emojis_w
-                        current_px = i * emojis_w + j + 1
+                        current_px = i * emojis_h + j + 1
                         progress = round(current_px / total_px * 100, 2)
-                        print(f'\rСохранение изображения: {progress:>6}%', end='')
+                        print(f'\rСохранение изображения: {progress}%', end='')
             if disp:
                 print()
 
@@ -241,7 +241,7 @@ def show_image(image, background_color=(0, 0, 0)):
     fig, ax = plt.subplots(dpi=300)
     fig.set_facecolor(np.array(background_color) / 255)
     ax.imshow(np.array(image))
-    ax.set_xticks([]); ax.set_yticks([])
+    ax.axis('off')
     plt.tight_layout()
     plt.show()
 
