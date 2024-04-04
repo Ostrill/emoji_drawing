@@ -107,51 +107,39 @@ def draw_emojis(filename, width, emoji_dict, disp=True):
     emoji_array : ndarray[str]
         | картинка из смайликов в виде 2D numpy-массива
     """
-    # Загрузка картинки и преобразование в numpy array
-    image = np.array(Image.open(f'input/{filename}'))
-    # Сохранение только трех каналов под R, G, B
-    image = image[:, :, :3]
+    # Загрузка картинки
+    image = Image.open(f'input/{filename}')
+
+    # Вывод размеров картинки
+    if disp:
+        source_w, source_h = image.size
+        print(f'Исходная картинка: {source_h}x{source_w}')
+        
+    # Уменьшение картинки, преобразование в numpy
+    # и сохранение только трех каналов под R, G, B
+    image.thumbnail((width, -1))
+    image = np.array(image)[:, :, :3]
     
     # Размеры картинки
     img_h, img_w, _ = image.shape
-    # Размер блока, который заменится смайликом
-    block_size = img_w // width
-    
-    # Размеры картины из смайликов
-    w_quantity = width
-    h_quantity = int(img_h / img_w * w_quantity)
     
     # Вывод размеров картинки
     if disp:
-        print(f'Исходная картинка: {img_h}x{img_w}')
-        print(f'Из смайликов:      {h_quantity}x{w_quantity}')
+        print(f'Из смайликов:      {img_h}x{img_w}')
     
-    # Уменьшенная версия картинки (сжатая)
-    small_image = np.zeros((h_quantity, w_quantity, 3), dtype=int)
-    # Ближайшая по цветам к смайликам версия картинки
-    emoji_image = np.zeros((h_quantity, w_quantity, 3), dtype=int)
     # Массив из смайликов
-    emoji_array = np.full((h_quantity, w_quantity), '', dtype='<U2')
+    emoji_array = np.full((img_h, img_w), '', dtype='<U2')
 
-    # i, j - индексы в сжатой картинке
-    # h, w - соответствующие индексы в оригинальной картинке
-    for i in range(h_quantity):
-        for j in range(w_quantity):
-            h = i * block_size
-            w = j * block_size
-            # Средний цвет по блоку
-            avg_color = image[h:h+block_size, w:w+block_size].mean(axis=(0, 1))
-            # Добавление нового смайлика в массив
-            emoji = nearest_emoji(avg_color, emoji_dict)
+    for i in range(img_h):
+        for j in range(img_w):
+            # Поиск подходящего смайлика и добавление его в массив
+            emoji = nearest_emoji(image[i, j], emoji_dict)
             emoji_array[i, j] = emoji
-            # Запись пикселя со средним цветом в уменьшенные картинки
-            small_image[i, j] = np.rint(avg_color)
-            emoji_image[i, j] = np.rint(emoji_dict[emoji])
 
             # Вывод прогресса
             if disp:
-                total_px = h_quantity * w_quantity
-                current_px = i * w_quantity + j + 1
+                total_px = img_h * img_w
+                current_px = i * img_w + j + 1
                 progress = round(current_px / total_px * 100, 2)
                 print(f'\rРисование: {progress}%', end='')
     if disp:
@@ -280,10 +268,10 @@ def draw(image_filename,
     
     emojis : str или None
         | смайлики, которыми необходимо нарисовать картинку:
-          - если указана строка, для нее будет построен
-            словарь, на основе которого и будет рисоваться
-            картинка (при этом параметр emoji_dict не 
-            учитывается);
+          - если указана строка, состоящаяя из смайликов через
+            пробел, то для них будет построен словарь, на основе 
+            которого и будет рисоваться картинка (при этом 
+            параметр emoji_dict не учитывается);
           - если None, в качестве словаря смайликов будет
             использоваться сохраненный в папке emoji_dicts/
             словарь с названием, указанным в параметре
@@ -311,7 +299,7 @@ def draw(image_filename,
         # Для построения словаря используется то же разрешение
         # (размер смайлика), что и для итоговой картинки, но
         # это необязательно, можно просто установить константу
-        emoji_dict = create_emoji_dict(emojis=list(emojis), 
+        emoji_dict = create_emoji_dict(emojis=emojis.split(' '), 
                                        background_color=background_color,
                                        emoji_resolution=emoji_resolution, 
                                        disp=disp)
