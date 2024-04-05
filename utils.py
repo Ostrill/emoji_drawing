@@ -171,7 +171,7 @@ def build_emoji_matrix(filename, width, emoji_dict, disp=True):
                 total_px = img_h * img_w
                 current_px = i * img_w + j + 1
                 progress = f'{round(current_px / total_px * 100, 2)}%'
-                print(f'\rРисование: {progress:<7}', end='')
+                print(f'\rФормирование матрицы: {progress:<7}', end='')
     if disp:
         print()
     
@@ -261,7 +261,7 @@ def save_as_image(emoji_matrix,
                         total_px = emojis_h * emojis_w
                         current_px = i * emojis_h + j + 1
                         progress = f'{round(current_px / total_px * 100, 2)}%'
-                        print(f'\rСохранение изображения: {progress:<7}', end='')
+                        print(f'\rРисование изображения: {progress:<7}', end='')
             if disp:
                 print()
 
