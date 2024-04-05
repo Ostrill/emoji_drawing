@@ -6,12 +6,13 @@ import matplotlib.pyplot as plt
 
 
 def create_emoji_dict(emojis, 
-                      background_color=(0, 0, 0),
+                      background_color=None,
                       emoji_resolution=100, 
                       disp=True):
     """
     Создать словарь смайликов, где каждому смайлику
-    соответствует подходящий ему цвет
+    соответствует подходящий ему цвет и доля занимаемой
+    им площади
 
     PARAMETERS
     ----------
@@ -19,8 +20,9 @@ def create_emoji_dict(emojis,
         | список из смайликов, из которых создается 
           словарь
     
-    background_color : (int, int, int)
-        | фоновый цвет для смайликов в формате RGB
+    background_color : (int, int, int) или None
+        | фоновый цвет для смайликов в формате RGB, 
+          если None, используется прозрачный фон
     
     emoji_resolution : int
         | каждый смайлик рассматривается как квадрат,
@@ -34,11 +36,17 @@ def create_emoji_dict(emojis,
     """
     emoji_dict = {}
 
+    # Параметры для изображения смайликов
+    if background_color is None:
+        img_back = (0, 0, 0, 0)
+    else:
+        img_back = (*background_color, 255)
+    img_size = (emoji_resolution, emoji_resolution)
+
     # Цикл по всем смайликам
     for i, emoji in enumerate(emojis, 1):
         # Создание новой картинки со смайликом
-        with Image.new('RGB', (emoji_resolution, emoji_resolution), 
-                       background_color) as image:
+        with Image.new('RGBA', img_size, img_back) as image:
             # Шрифт для отображения смайлика
             font = ImageFont.truetype('fonts/arial.ttf', emoji_resolution)
             # Рисование смайлика на картинке
@@ -46,13 +54,25 @@ def create_emoji_dict(emojis,
                 pilmoji.text((0, 0), emoji, font=font)
 
         # Вычисление среднего цвета получившейся картинки смайлика
-        avg_color = np.array(image).mean(axis=(0, 1))
-        emoji_dict[emoji] = avg_color
+        if background_color is None:
+            # Средний цвет только по непрозрачным пикселям
+            np_image = np.array(image)
+            weights = np_image[:, :, 3:] / 255
+            avg_color = (np_image[:, :, :3] * weights).sum(axis=(0, 1)) / weights.sum()
+            # Доля занимаемой смайликом площади
+            area = weights.sum() / (emoji_resolution ** 2)
+        else:
+            # Средний цвет по каналам RGB
+            avg_color = np.array(image)[:, :, :3].mean(axis=(0, 1))
+            area = 1
+
+        # Добавление смайлика в словарь
+        emoji_dict[emoji] = (avg_color, area)
 
         # Вывод прогресса
         if disp:
             progress = round(i / len(emojis) * 100, 2)
-            print(f'\rПостроение словаря: {progress}%', end='')
+            print(f'\rПостроение словаря: {progress:>6}% ({i}/{len(emojis)})', end='')
 
     if disp:
         print()
@@ -60,12 +80,22 @@ def create_emoji_dict(emojis,
     return emoji_dict
 
 
-def load_emoji_dict(name):
+def load_emoji_list(list_name):
     """
-    Загрузить словарь смайликов из папки emoji_dicts/
-    по его названию
+    Загрузить список из смайликов {list_name}, лежащий в
+    папке emoji_sources/
     """
-    with open(f'emoji_dicts/{name}.pkl', 'rb') as file:
+    with open(f'emoji_sources/{list_name}.txt', 'r') as file:
+        emoji_list = [line.strip() for line in file]
+    return emoji_list
+    
+
+def load_emoji_dict(dict_name):
+    """
+    Загрузить словарь смайликов {dict_name}, лежащий в
+    папке emoji_dicts/
+    """
+    with open(f'emoji_dicts/{dict_name}.pkl', 'rb') as file:
         emoji_dict = pickle.load(file)
     return emoji_dict
 
@@ -78,7 +108,7 @@ def color_diff(rgb1, rgb2):
 def nearest_emoji(rgb, emoji_dict):
     """Найти ближайший по цвету смайлик"""
     return min(emoji_dict.keys(), 
-               key=lambda k: color_diff(rgb, emoji_dict[k]))
+               key=lambda k: color_diff(rgb, emoji_dict[k][0]))
 
 
 def draw_emojis(filename, width, emoji_dict, disp=True):
@@ -98,15 +128,16 @@ def draw_emojis(filename, width, emoji_dict, disp=True):
         | специальный словарь смайликов, где каждому
           смайлику соответствует назначенный ему цвет
           в формате numpy-массива из трех значений (RGB)
+          и доля занимаемой в квадрате площади
     
     disp : bool
         | отображать ли результат и логи
     
     RETURNS
     -------
-    emoji_array : ndarray[str]
+    emoji_array : 2D-ndarray[str]
         | картинка из смайликов в виде 2D numpy-массива
-    """
+    """    
     # Загрузка картинки
     image = Image.open(f'input/{filename}')
 
@@ -129,7 +160,7 @@ def draw_emojis(filename, width, emoji_dict, disp=True):
     
     # Массив из смайликов
     emoji_array = np.full((img_h, img_w), '', dtype='<U2')
-
+            
     for i in range(img_h):
         for j in range(img_w):
             # Поиск подходящего смайлика и добавление его в массив
@@ -144,7 +175,7 @@ def draw_emojis(filename, width, emoji_dict, disp=True):
                 print(f'\rРисование: {progress}%', end='')
     if disp:
         print()
-
+    
     return emoji_array
 
 
@@ -155,8 +186,8 @@ def save_as_text(emoji_array, image_name):
 
     PARAMETERS
     ----------
-    emoji_array : ndarray[str]
-        | 2D numpy-массив из смайликов
+    emoji_array : 2D-ndarray[str]
+        | двумерный numpy-массив из смайликов
     
     image_name : str
         | название картинки, текстовый файл для 
@@ -168,8 +199,11 @@ def save_as_text(emoji_array, image_name):
         file.write(as_string)
 
 
-def save_as_image(emoji_array, image_name, emoji_resolution, 
-                  background_color=(0, 0, 0), disp=False):
+def save_as_image(emoji_array, 
+                  image_name, 
+                  emoji_resolution, 
+                  background_color=None, 
+                  disp=False):
     """
     Сохранить результат (массив смайликов) в файл
     в виде картинки формата PNG
@@ -188,9 +222,12 @@ def save_as_image(emoji_array, image_name, emoji_resolution,
           в пикселях (каждый смайлик рисуется в квадратной 
           области, и этот параметр задает сторону квадрата)
 
-    background_color : (int, int, int)
-        | цвет фона картинки в формате RGB
-
+    background_color : (int, int, int) или None или 'dynamic'
+        | цвет фона у итоговой картинки:
+          - если задан кортеж из трех чисел, фон будет окрашен
+            в соответствующий RGB-цвет;
+          - если None, фон будет прозрачным
+    
     disp : bool
         | выводить ли прогресс сохранения картинки
     """
@@ -198,17 +235,26 @@ def save_as_image(emoji_array, image_name, emoji_resolution,
     emojis_h, emojis_w = emoji_array.shape
     # Высота и ширина итоговой картинки из смайликов
     img_h, img_w = np.array(emoji_array.shape) * emoji_resolution
+
+    # Определение цвета фона для разных режимов
+    dynamic_mode = False
+    if background_color is None:
+        img_back = (0, 0, 0, 0)
+    else:
+        img_back = (*background_color, 255)
     
     # Создание картинки из смайликов
-    with Image.new('RGB', (img_w, img_h), background_color) as image:
+    with Image.new('RGBA', (img_w, img_h), img_back) as image:
         # Шрифт для отображения смайликов
         font = ImageFont.truetype('fonts/arial.ttf', emoji_resolution)
+
         # Рисование смайликов на картинке
         with Pilmoji(image) as pilmoji:
             for i in range(emojis_w):
                 for j in range(emojis_h):
                     # Индексы пикселей в итоговой картинке
                     w, h = i * emoji_resolution, j * emoji_resolution
+                    # Отрисовка смайлика
                     pilmoji.text((w, h), emoji_array[j, i], font=font)
                     
                     # Вывод прогресса
