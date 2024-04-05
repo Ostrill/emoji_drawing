@@ -2,7 +2,6 @@ from PIL import Image, ImageFont
 from pilmoji import Pilmoji
 import numpy as np
 import pickle
-import matplotlib.pyplot as plt
 
 
 def create_emoji_dict(emojis, 
@@ -12,7 +11,7 @@ def create_emoji_dict(emojis,
     """
     Создать словарь смайликов, где каждому смайлику
     соответствует подходящий ему цвет и доля занимаемой
-    им площади
+    им площади в квадратной ячейке
 
     PARAMETERS
     ----------
@@ -100,20 +99,21 @@ def load_emoji_dict(dict_name):
     return emoji_dict
 
 
-def color_diff(rgb1, rgb2):
+def calc_color_diff(rgb1, rgb2):
     """Расстояние между двумя цветами"""
     return np.linalg.norm(rgb1 - rgb2)
 
 
-def nearest_emoji(rgb, emoji_dict):
+def get_nearest_emoji(rgb, emoji_dict):
     """Найти ближайший по цвету смайлик"""
     return min(emoji_dict.keys(), 
-               key=lambda k: color_diff(rgb, emoji_dict[k][0]))
+               key=lambda k: calc_color_diff(rgb, emoji_dict[k][0]))
 
 
-def draw_emojis(filename, width, emoji_dict, disp=True):
+def build_emoji_matrix(filename, width, emoji_dict, disp=True):
     """
-    Нарисовать картинку из смайликов-квадратов
+    Нарисовать картинку из смайликов-квадратов в виде
+    2D-numpy-массива (матрицы)
 
     PARAMETERS
     ----------
@@ -135,7 +135,7 @@ def draw_emojis(filename, width, emoji_dict, disp=True):
     
     RETURNS
     -------
-    emoji_array : 2D-ndarray[str]
+    emoji_matrix : 2D-ndarray[str]
         | картинка из смайликов в виде 2D numpy-массива
     """    
     # Загрузка картинки
@@ -158,14 +158,14 @@ def draw_emojis(filename, width, emoji_dict, disp=True):
     if disp:
         print(f'Из смайликов:      {img_h}x{img_w}')
     
-    # Массив из смайликов
-    emoji_array = np.full((img_h, img_w), '', dtype='<U2')
+    # Матрица из смайликов
+    emoji_matrix = np.full((img_h, img_w), '', dtype='<U2')
             
     for i in range(img_h):
         for j in range(img_w):
-            # Поиск подходящего смайлика и добавление его в массив
-            emoji = nearest_emoji(image[i, j], emoji_dict)
-            emoji_array[i, j] = emoji
+            # Поиск подходящего смайлика и добавление его в матрицу
+            nearest_emoji = get_nearest_emoji(image[i, j], emoji_dict)
+            emoji_matrix[i, j] = nearest_emoji
 
             # Вывод прогресса
             if disp:
@@ -176,18 +176,18 @@ def draw_emojis(filename, width, emoji_dict, disp=True):
     if disp:
         print()
     
-    return emoji_array
+    return emoji_matrix
 
 
-def save_as_text(emoji_array, image_name):
+def save_as_text(emoji_matrix, image_name):
     """
-    Сохранить результат (массив смайликов) в файл
+    Сохранить результат (матрицу смайликов) в файл
     в виде текста
 
     PARAMETERS
     ----------
-    emoji_array : 2D-ndarray[str]
-        | двумерный numpy-массив из смайликов
+    emoji_matrix : 2D-ndarray[str]
+        | двумерный numpy-массив (матрица) из смайликов
     
     image_name : str
         | название картинки, текстовый файл для 
@@ -195,23 +195,23 @@ def save_as_text(emoji_array, image_name):
     """
     with open(f'output/{image_name}.txt', 'w') as file:
         as_string = '\n'.join(''.join(line) 
-                              for line in emoji_array)
+                              for line in emoji_matrix)
         file.write(as_string)
 
 
-def save_as_image(emoji_array, 
+def save_as_image(emoji_matrix, 
                   image_name, 
                   emoji_resolution, 
                   background_color=None, 
                   disp=False):
     """
-    Сохранить результат (массив смайликов) в файл
+    Сохранить результат (матрицу смайликов) в файл
     в виде картинки формата PNG
 
     PARAMETERS
     ----------
-    emoji_array : ndarray[str]
-        | 2D numpy-массив из смайликов
+    emoji_matrix : ndarray[str]
+        | 2D numpy-массив (матрица) из смайликов
     
     image_name : str
         | название картинки, png-файл для 
@@ -232,9 +232,9 @@ def save_as_image(emoji_array,
         | выводить ли прогресс сохранения картинки
     """
     # Высота и ширина массива из смайликов
-    emojis_h, emojis_w = emoji_array.shape
+    emojis_h, emojis_w = emoji_matrix.shape
     # Высота и ширина итоговой картинки из смайликов
-    img_h, img_w = np.array(emoji_array.shape) * emoji_resolution
+    img_h, img_w = np.array(emoji_matrix.shape) * emoji_resolution
 
     # Определение цвета фона для разных режимов
     dynamic_mode = False
@@ -255,7 +255,7 @@ def save_as_image(emoji_array,
                     # Индексы пикселей в итоговой картинке
                     w, h = i * emoji_resolution, j * emoji_resolution
                     # Отрисовка смайлика
-                    pilmoji.text((w, h), emoji_array[j, i], font=font)
+                    pilmoji.text((w, h), emoji_matrix[j, i], font=font)
                     
                     # Вывод прогресса
                     if disp:
@@ -268,17 +268,7 @@ def save_as_image(emoji_array,
 
     image.save(f'output/{image_name}.png')
     return image
-
-
-def show_image(image, background_color=(0, 0, 0)):
-    """Показать изображение с помощью matplotlib"""
-    fig, ax = plt.subplots(dpi=300)
-    fig.set_facecolor(np.array(background_color) / 255)
-    ax.imshow(np.array(image))
-    ax.axis('off')
-    plt.tight_layout()
-    plt.show()
-
+    
 
 def draw(image_filename,
          save_image_name,
@@ -350,31 +340,26 @@ def draw(image_filename,
                                        emoji_resolution=emoji_resolution, 
                                        disp=disp)
         
-    # Рисование картинки (построение массива из смайликов)
-    emoji_array = draw_emojis(filename=image_filename, 
-                              width=emoji_width, 
-                              emoji_dict=emoji_dict, 
-                              disp=disp)
+    # Построение двумерной матрицы из смайликов
+    emoji_matrix = build_emoji_matrix(filename=image_filename, 
+                                      width=emoji_width, 
+                                      emoji_dict=emoji_dict, 
+                                      disp=disp)
 
     # Сохранение в виде текста
-    save_as_text(emoji_array=emoji_array, 
+    save_as_text(emoji_matrix=emoji_matrix, 
                  image_name=save_image_name)
     if disp:
         print('Изображение в виде текста сохранено')
 
     # Сохранение в виде изображения
-    result_image = save_as_image(emoji_array=emoji_array, 
+    result_image = save_as_image(emoji_matrix=emoji_matrix, 
                                  image_name=save_image_name, 
                                  emoji_resolution=emoji_resolution, 
                                  background_color=background_color, 
                                  disp=disp)
     if disp:
         print('Изображение в png-формате сохранено')
-
-    # Рисование картинки в ячейке
-    if disp:
-        show_image(image=result_image, 
-                   background_color=background_color)
         
     return result_image
     
