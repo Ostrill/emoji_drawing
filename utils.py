@@ -179,7 +179,7 @@ def get_nearest_emoji_and_back(rgb, emoji_dict):
 
 
 def draw(image_filename,
-         save_image_name,
+         save_image_name='image',
          emoji_width=50,
          emoji_resolution=50,
          background_color=(0, 0, 0),
