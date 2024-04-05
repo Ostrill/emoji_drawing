@@ -70,9 +70,8 @@ def create_emoji_dict(emojis,
 
         # Вывод прогресса
         if disp:
-            progress = round(i / len(emojis) * 100, 2)
-            print(f'\rПостроение словаря: {progress:>6}% ({i}/{len(emojis)})', end='')
-
+            progress = f'{round(i / len(emojis) * 100, 2)}%'
+            print(f'\rПостроение словаря: {progress:<7} ({i}/{len(emojis)})', end='')
     if disp:
         print()
 
@@ -171,8 +170,8 @@ def build_emoji_matrix(filename, width, emoji_dict, disp=True):
             if disp:
                 total_px = img_h * img_w
                 current_px = i * img_w + j + 1
-                progress = round(current_px / total_px * 100, 2)
-                print(f'\rРисование: {progress}%', end='')
+                progress = f'{round(current_px / total_px * 100, 2)}%'
+                print(f'\rРисование: {progress:<7}', end='')
     if disp:
         print()
     
@@ -261,8 +260,8 @@ def save_as_image(emoji_matrix,
                     if disp:
                         total_px = emojis_h * emojis_w
                         current_px = i * emojis_h + j + 1
-                        progress = round(current_px / total_px * 100, 2)
-                        print(f'\rСохранение изображения: {progress}%', end='')
+                        progress = f'{round(current_px / total_px * 100, 2)}%'
+                        print(f'\rСохранение изображения: {progress:<7}', end='')
             if disp:
                 print()
 
