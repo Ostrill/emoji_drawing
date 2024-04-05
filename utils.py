@@ -1,4 +1,4 @@
-from PIL import Image, ImageFont
+from PIL import Image, ImageFont, ImageDraw
 from pilmoji import Pilmoji
 import numpy as np
 import pickle
@@ -40,11 +40,9 @@ def create_emoji_dict(emojis,
     """
     emoji_dict = {}
 
-    # Параметры для изображения смайликов
-    if background_color is None:
-        img_back = (0, 0, 0, 0)
-    else:
-        img_back = (*background_color, 255)
+    # Формирование RGBA цвета фона с A=0
+    img_back = (*(background_color or [0]*3), 0)
+    # Размер картинки, в которой будут рисоваться смайлики
     img_size = (emoji_resolution, emoji_resolution)
 
     # Цикл по всем смайликам
@@ -57,18 +55,19 @@ def create_emoji_dict(emojis,
             with Pilmoji(image) as pilmoji:
                 pilmoji.text((0, 0), emoji, font=font)
 
+        # Веса каждого пикселя (насколько каждый непрозрачен)
+        np_image = np.array(image)
+        weights = np_image[:, :, 3:] / 255
+        # Доля занимаемой смайликом площади в квадратной ячейке
+        area = weights.sum() / (emoji_resolution ** 2)
+        
         # Вычисление среднего цвета получившейся картинки смайлика
         if background_color is None:
             # Средний цвет только по непрозрачным пикселям
-            np_image = np.array(image)
-            weights = np_image[:, :, 3:] / 255
             avg_color = (np_image[:, :, :3] * weights).sum(axis=(0, 1)) / weights.sum()
-            # Доля занимаемой смайликом площади
-            area = weights.sum() / (emoji_resolution ** 2)
         else:
-            # Средний цвет по каналам RGB
+            # Средний цвет по каналам RGB (без учета прозрачности)
             avg_color = np.array(image)[:, :, :3].mean(axis=(0, 1))
-            area = 1
 
         # Добавление смайлика в словарь
         emoji_dict[emoji] = (avg_color, area)
@@ -525,64 +524,47 @@ def draw_dynamic(image_filename,
     
     # Размеры матрицы смайликов
     img_h, img_w, _ = image.shape
+    # Размеры итоговой картинки
+    result_h, result_w = img_h*emoji_resolution, img_w*emoji_resolution
     
     # Вывод размеров картинки после уменьшения
     if disp:
         print(f' → {img_h}x{img_w}')
-    
-    # Матрица из смайликов
-    emoji_matrix = np.full((img_h, img_w), '', dtype='<U2')
-    # Картинка, где каждый пиксель покрашен в цвет фона для 
-    # соответствующего ему смайлика
-    backgrounds = np.full((img_h, img_w, 3), 0, dtype='uint8')
-            
-    for i in range(img_h):
-        for j in range(img_w):
-            # Поиск подходящего смайлика с фоном и добавление его в матрицу
-            emoji, back = get_nearest_emoji_and_back(image[i, j], emoji_dict)
-            emoji_matrix[i, j] = emoji
-            backgrounds[i, j] = np.rint(back)
 
-            # Вывод прогресса
+    # Создание итогового изображения result_image
+    with Image.new('RGBA', (result_w, result_h), (0,)*4) as result_image:
+        # Компонент для рисования на картинке
+        img_draw = ImageDraw.Draw(result_image)
+        # Шрифт для отображения смайликов
+        font = ImageFont.truetype('fonts/arial.ttf', emoji_resolution)
+        with Pilmoji(result_image) as pilmoji:
+            for i in range(img_h):
+                for j in range(img_w):
+                    # Поиск подходящего сочетания смайлика с фоном
+                    emoji, back = get_nearest_emoji_and_back(image[i, j], 
+                                                             emoji_dict)
+                    # Индексы пикселей в итоговой картинке
+                    h, w = i * emoji_resolution, j * emoji_resolution
+                    # Отрисовка прямоугольника (фона для смайлика)
+                    img_draw.rectangle((w, h, w+emoji_resolution, h+emoji_resolution), 
+                                       fill=tuple(np.rint(back).astype(int)))
+                    # Отрисовка смайлика
+                    pilmoji.text((w, h), emoji, font=font)
+        
+                    # Вывод прогресса
+                    if disp:
+                        total_px = img_h * img_w
+                        current_px = i * img_w + j + 1
+                        progress = f'{round(current_px / total_px * 100, 2)}%'
+                        print(f'\rРисование: {progress:<7}', end='')
             if disp:
-                total_px = img_h * img_w
-                current_px = i * img_w + j + 1
-                progress = f'{round(current_px / total_px * 100, 2)}%'
-                print(f'\rФормирование матрицы: {progress:<7}', end='')
-    if disp:
-        print()
-
-    # Увеличение размера backgrounds под размер итоговой картинки
-    result_h, result_w = img_h*emoji_resolution, img_w*emoji_resolution
-    image = Image.fromarray(backgrounds).resize((result_w, result_h), 
-                                                resample=Image.BOX)
-    
-    # Шрифт для отображения смайликов
-    font = ImageFont.truetype('fonts/arial.ttf', emoji_resolution)
-
-    # Рисование смайликов на картинке
-    with Pilmoji(image) as pilmoji:
-        for i in range(img_w):
-            for j in range(img_h):
-                # Индексы пикселей в итоговой картинке
-                w, h = i * emoji_resolution, j * emoji_resolution
-                # Отрисовка смайлика
-                pilmoji.text((w, h), emoji_matrix[j, i], font=font)
-                
-                # Вывод прогресса
-                if disp:
-                    total_px = img_h * img_w
-                    current_px = i * img_h + j + 1
-                    progress = f'{round(current_px / total_px * 100, 2)}%'
-                    print(f'\rРисование изображения: {progress:<7}', end='')
-        if disp:
-            print()
+                print()
 
     # Сохранение изображения
-    image.save(f'output/{save_image_name}.png')
+    result_image.save(f'output/{save_image_name}.png')
 
     if disp:
         print('Изображение в png-формате сохранено')
         
-    return image
+    return result_image
     
