@@ -1,17 +1,51 @@
 from PIL import Image, ImageFont, ImageDraw
 from pilmoji import Pilmoji
+from pilmoji.source import EmojiCDNSource
 import numpy as np
 import pickle
+
+
+# Поддерживаемые стили для смайликов
+STYLES = ['twitter', 'apple', 'google', 'facebook']
+
+
+def get_emoji_style(style):
+    """
+    Возвращает класс стиля смайликов. Стилей всего 4:
+    - twitter
+    - apple
+    - google
+    - facebook
+    """
+    # Проверка, поддерживается ли стиль
+    assert style in STYLES, f'Поддерживаемые стили: {", ".join(STYLES)}'
+
+    # Класс, который используется для стилей в Pilmoji
+    class StyleClass(EmojiCDNSource):
+        STYLE = style
+        
+    return StyleClass
 
 
 def create_emoji_dict(emojis, 
                       background_color=None,
                       emoji_resolution=100, 
+                      emoji_styles=STYLES,
                       disp=True):
     """
     Создать словарь смайликов, где каждому смайлику
     соответствует подходящий ему цвет и доля занимаемой
-    им площади в квадратной ячейке
+    им площади в квадратной ячейке. Для каждого стиля
+    создается собственный словарь, итоговая структура
+    получается следующей:
+    emoji_dict = {
+        '<стиль>' : {
+            '<смайлик>' : (
+                <средний цвет> : array([float, float, float]),
+                <занимаемая площадь> : float
+            )
+        }
+    }
 
     PARAMETERS
     ----------
@@ -28,6 +62,10 @@ def create_emoji_dict(emojis,
           этот параметр задает размер стороны квадрата.
           Влияет на точность определения среднего цвета
           смайлика, рекомендуется просто оставить 100
+
+    emoji_styles : list[str]
+        | список из стилей смайликов, для которых нужно
+          построить словари
     
     disp : bool
         | выводить ли прогресс создания словаря
@@ -35,44 +73,53 @@ def create_emoji_dict(emojis,
     """
     emoji_dict = {}
 
+    # Формирование списка стилей
+    styles = [get_emoji_style(style) for style in emoji_styles]
+
     # Формирование RGBA цвета фона с A=0
     img_back = (*(background_color or [0]*3), 0)
     # Размер картинки, в которой будут рисоваться смайлики
     img_size = (emoji_resolution, emoji_resolution)
 
-    # Цикл по всем смайликам
-    for i, emoji in enumerate(emojis, 1):
-        # Создание новой картинки со смайликом
-        with Image.new('RGBA', img_size, img_back) as image:
-            # Шрифт для отображения смайлика
-            font = ImageFont.truetype('fonts/arial.ttf', emoji_resolution)
-            # Рисование смайлика на картинке
-            with Pilmoji(image) as pilmoji:
-                pilmoji.text((0, 0), emoji, font=font)
-
-        # Веса каждого пикселя (насколько каждый непрозрачен)
-        np_image = np.array(image)
-        weights = np_image[:, :, 3:] / 255
-        # Доля занимаемой смайликом площади в квадратной ячейке
-        area = weights.sum() / (emoji_resolution ** 2)
-        
-        # Вычисление среднего цвета получившейся картинки смайлика
-        if background_color is None:
-            # Средний цвет только по непрозрачным пикселям
-            avg_color = (np_image[:, :, :3] * weights).sum(axis=(0, 1)) / weights.sum()
-        else:
-            # Средний цвет по каналам RGB (без учета прозрачности)
-            avg_color = np.array(image)[:, :, :3].mean(axis=(0, 1))
-
-        # Добавление смайлика в словарь
-        emoji_dict[emoji] = (avg_color, area)
-
-        # Вывод прогресса
+    # Цикл по всем рассматриваемым стилям
+    for style, style_name in zip(styles, emoji_styles):
+        # Инициализация словаря для стиля
+        emoji_dict[style_name] = {}
+        # Цикл по всем смайликам
+        for i, emoji in enumerate(emojis, 1):
+            # Создание новой картинки со смайликом
+            with Image.new('RGBA', img_size, img_back) as image:
+                # Шрифт для отображения смайлика
+                font = ImageFont.truetype('fonts/arial.ttf', emoji_resolution)
+                # Рисование смайлика на картинке
+                with Pilmoji(image, source=style) as pilmoji:
+                    pilmoji.text((0, 0), emoji, font=font)
+    
+            # Веса каждого пикселя (насколько каждый непрозрачен)
+            np_image = np.array(image)
+            weights = np_image[:, :, 3:] / 255
+            # Доля занимаемой смайликом площади в квадратной ячейке
+            area = weights.sum() / (emoji_resolution ** 2)
+            
+            # Вычисление среднего цвета получившейся картинки смайлика
+            if background_color is None:
+                # Средний цвет только по непрозрачным пикселям
+                weighted_sum = (np_image[:, :, :3] * weights).sum(axis=(0, 1))
+                avg_color =  weighted_sum / weights.sum()
+            else:
+                # Средний цвет по каналам RGB (без учета прозрачности)
+                avg_color = np.array(image)[:, :, :3].mean(axis=(0, 1))
+    
+            # Добавление смайлика в словарь
+            emoji_dict[style_name][emoji] = (avg_color, area)
+    
+            # Вывод прогресса
+            if disp:
+                progress = f'{round(i / len(emojis) * 100, 2)}%'
+                progress_text = f'Построение словаря для стиля "{style_name}":'
+                print(f'\r{progress_text} {progress:<7} ({i}/{len(emojis)})', end='')
         if disp:
-            progress = f'{round(i / len(emojis) * 100, 2)}%'
-            print(f'\rПостроение словаря: {progress:<7} ({i}/{len(emojis)})', end='')
-    if disp:
-        print()
+            print()
 
     return emoji_dict
 
@@ -184,8 +231,10 @@ def draw(image_filename,
          emoji_resolution=50,
          background_color=(0, 0, 0),
          emojis=None, 
-         emoji_dict_name='classic_black', 
+         emoji_dict_name='classic_black',
+         emoji_style='twitter',
          dynamic_background=False,
+         save_as_text=True,
          disp=True):
     """
     Главная функция для рисования картинки из символов
@@ -229,12 +278,20 @@ def draw(image_filename,
           - если None, для рисования используются смайлики из
             параметра emojis (но если этот параметр = None,
             будет выброшена ошибка)
+    
+    emoji_style : str
+        | стиль отображения смайликов, всего поддерживается четыре
+          разных стиля: 'twitter', 'apple', 'google' и 'facebook'
 
     dynamic_background : bool
         | использовать ли динамическое создание фона, при
           котором для каждого смайлика отрисовывается собственный 
           цвет фона, в сочетании с которым он становится еще ближе
           к исходной картинке
+
+    save_as_text : bool
+        | сохранять ли картинку в текстовом формате (в виде набора
+          смайликов)
     
     disp : bool
         | выводить ли прогресс создания картинки
@@ -243,9 +300,12 @@ def draw(image_filename,
     error_text = 'Необходимо указать либо emojis, либо emojis_dict!'
     assert not(emojis is None and emoji_dict_name is None), error_text
 
+    # Формирование стиля для смайликов
+    style = get_emoji_style(emoji_style)
+
     # Подготовка словаря смайликов
     if emojis is None:
-        emoji_dict = load_emoji_dict(emoji_dict_name)
+        emoji_dict = load_emoji_dict(emoji_dict_name)[emoji_style]
     else:
         # Для построения словаря используется то же разрешение
         # (размер смайлика), что и для итоговой картинки, но
@@ -253,7 +313,8 @@ def draw(image_filename,
         emoji_dict = create_emoji_dict(emojis=emojis.split(' '), 
                                        background_color=None,
                                        emoji_resolution=emoji_resolution, 
-                                       disp=disp)
+                                       emoji_styles=[emoji_style],
+                                       disp=disp)[emoji_style]
     
     # Загрузка картинки-исходника
     image = Image.open(f'input/{image_filename}')
@@ -292,7 +353,7 @@ def draw(image_filename,
         img_draw = ImageDraw.Draw(result_image)
         # Шрифт для отображения смайликов
         font = ImageFont.truetype('fonts/arial.ttf', emoji_resolution)
-        with Pilmoji(result_image) as pilmoji:
+        with Pilmoji(result_image, source=style) as pilmoji:
             for i in range(img_h):
                 for j in range(img_w):
                     # Индексы пикселей в итоговой картинке
@@ -310,8 +371,10 @@ def draw(image_filename,
                         
                     # Отрисовка смайлика
                     pilmoji.text((w, h), emoji, font=font)
+                    
                     # Добавление смайлика в текстовое представление картинки
-                    emoji_image_text += emoji
+                    if save_as_text:
+                        emoji_image_text += emoji
                     
                     # Вывод прогресса
                     if disp:
@@ -321,7 +384,7 @@ def draw(image_filename,
                         print(f'\rРисование: {progress:<7}', end='')
                         
                 # Перенос строки в текстовом представлении картинки из смайликов
-                if i + 1 < img_h:
+                if save_as_text and (i + 1 < img_h):
                     emoji_image_text += '\n'
                     
             # Перенос строки из-за вывода прогресса с '\r'
@@ -329,8 +392,9 @@ def draw(image_filename,
                 print()
 
     # Сохранение картинки в виде текста
-    with open(f'output/{save_image_name}.txt', 'w') as file:
-        file.write(emoji_image_text)
+    if save_as_text:
+        with open(f'output/{save_image_name}.txt', 'w') as file:
+            file.write(emoji_image_text)
     
     # Сохранение изображения
     result_image.save(f'output/{save_image_name}.png')
