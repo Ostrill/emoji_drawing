@@ -225,6 +225,49 @@ def get_nearest_emoji_and_back(rgb, emoji_dict):
     return best_emoji, emoji_back
 
 
+def unite_emoji_dict(emoji_dict, styles=None):
+    """
+    Объединить смайлики из разных стилей в один словарь,
+    добавив к ключам название стиля.
+
+    PARAMETERS
+    ----------
+    emoji_dict : dict
+        | словарь смайликов с разными стилями
+    
+    styles : list[str] or None
+        | список стилей, которые необходимо объединить
+          (если None, объединятся все имеющиеся стили)
+    """
+    united = {}
+    if styles is None:
+        styles = emoji_dict.keys()
+    for style in styles:
+        for k, v in emoji_dict[style].items():
+            united[f'{style}_{k}'] = v
+    return united
+
+
+def save_matrix_as_text(emoji_matrix, name):
+    """
+    Сохранить результат (матрицу смайликов) в файл
+    в виде текста
+
+    PARAMETERS
+    ----------
+    emoji_matrix : ndarray[str]
+        | 2D numpy-массив из смайликов
+    
+    name : str
+        | название картинки, текстовый файл для 
+          которой будет сохранен в папку output/
+    """
+    with open(f'output/{name}.txt', 'w') as file:
+        as_string = '\n'.join(''.join(line) 
+                              for line in emoji_matrix)
+        file.write(as_string)
+
+
 def draw(image_filename,
          save_image_name='image',
          emoji_width=50,
@@ -279,9 +322,11 @@ def draw(image_filename,
             параметра emojis (но если этот параметр = None,
             будет выброшена ошибка)
     
-    emoji_style : str
+    emoji_style : str или list[str]
         | стиль отображения смайликов, всего поддерживается четыре
-          разных стиля: 'twitter', 'apple', 'google' и 'facebook'
+          разных стиля: 'twitter', 'apple', 'google' и 'facebook'.
+          Можно указать как какой-либо конкретный стиль, так и 
+          список из стилей
 
     dynamic_background : bool
         | использовать ли динамическое создание фона, при
@@ -301,11 +346,16 @@ def draw(image_filename,
     assert not(emojis is None and emoji_dict_name is None), error_text
 
     # Формирование стиля для смайликов
-    style = get_emoji_style(emoji_style)
-
+    if isinstance(emoji_style, str):
+        emoji_style = [emoji_style]
+        
+    # Это делается по той причине, что внутри get_emoji_style есть assert,
+    # завершающий функцию с ошибкой в случае некорректных стилей
+    _ = [get_emoji_style(s) for s in emoji_style]
+    
     # Подготовка словаря смайликов
     if emojis is None:
-        emoji_dict = load_emoji_dict(emoji_dict_name)[emoji_style]
+        emoji_dict = load_emoji_dict(emoji_dict_name)
     else:
         # Для построения словаря используется то же разрешение
         # (размер смайлика), что и для итоговой картинки, но
@@ -313,8 +363,10 @@ def draw(image_filename,
         emoji_dict = create_emoji_dict(emojis=emojis.split(' '), 
                                        background_color=None,
                                        emoji_resolution=emoji_resolution, 
-                                       emoji_styles=[emoji_style],
-                                       disp=disp)[emoji_style]
+                                       emoji_styles=emoji_style,
+                                       disp=disp)
+    # Объединение словарей со стилями
+    emoji_dict = unite_emoji_dict(emoji_dict, emoji_style)
     
     # Загрузка картинки-исходника
     image = Image.open(f'input/{image_filename}')
@@ -338,14 +390,15 @@ def draw(image_filename,
     if disp:
         print(f' → {img_h}x{img_w}')
 
-    # Текстовое представление картинки из смайликов
-    emoji_image_text = ''
-
     # Установка цвета для итоговой картинки
     if background_color is None:
         background_RGBA = (0, 0, 0, 0)
     else:
         background_RGBA = (*background_color, 255)
+
+    # Матрицы со стилями и смайликами по каждой ячейке картинки
+    style_matrix = np.full((img_h, img_w), '', dtype='object')
+    emoji_matrix = np.full((img_h, img_w), '', dtype='object')
         
     # Создание итогового изображения result_image
     with Image.new('RGBA', (result_w, result_h), background_RGBA) as result_image:
@@ -353,48 +406,56 @@ def draw(image_filename,
         img_draw = ImageDraw.Draw(result_image)
         # Шрифт для отображения смайликов
         font = ImageFont.truetype('fonts/arial.ttf', emoji_resolution)
-        with Pilmoji(result_image, source=style) as pilmoji:
-            for i in range(img_h):
-                for j in range(img_w):
+
+        # Построение матриц смайликов и соответствующих им стилей
+        for i in range(img_h):
+            for j in range(img_w):
+                if dynamic_background:
                     # Индексы пикселей в итоговой картинке
                     h, w = i * emoji_resolution, j * emoji_resolution
+                    # Поиск подходящего сочетания смайлика с фоном
+                    emoji, back = get_nearest_emoji_and_back(image[i, j], emoji_dict)
+                    # Отрисовка прямоугольника (фона для смайлика)
+                    img_draw.rectangle((w, h, w+emoji_resolution, h+emoji_resolution), 
+                                       fill=tuple(np.rint(back).astype(int)))
+                else:
+                    # Поиск ближайшего по среднему цвету смайлика
+                    emoji = get_nearest_emoji(image[i, j], emoji_dict)
 
-                    if dynamic_background:
-                        # Поиск подходящего сочетания смайлика с фоном
-                        emoji, back = get_nearest_emoji_and_back(image[i, j], emoji_dict)
-                        # Отрисовка прямоугольника (фона для смайлика)
-                        img_draw.rectangle((w, h, w+emoji_resolution, h+emoji_resolution), 
-                                           fill=tuple(np.rint(back).astype(int)))
-                    else:
-                        # Поиск ближайшего по среднему цвету смайлика
-                        emoji = get_nearest_emoji(image[i, j], emoji_dict)
-                        
-                    # Отрисовка смайлика
-                    pilmoji.text((w, h), emoji, font=font)
-                    
-                    # Добавление смайлика в текстовое представление картинки
-                    if save_as_text:
-                        emoji_image_text += emoji
-                    
-                    # Вывод прогресса
-                    if disp:
-                        total_px = img_h * img_w
-                        current_px = i * img_w + j + 1
-                        progress = f'{round(current_px / total_px * 100, 2)}%'
-                        print(f'\rРисование: {progress:<7}', end='')
-                        
-                # Перенос строки в текстовом представлении картинки из смайликов
-                if save_as_text and (i + 1 < img_h):
-                    emoji_image_text += '\n'
-                    
-            # Перенос строки из-за вывода прогресса с '\r'
-            if disp:
-                print()
+                style_matrix[i, j], emoji_matrix[i, j] = emoji.split('_')
+
+                # Вывод прогресса
+                if disp:
+                    total_px = img_h * img_w
+                    current_px = i * img_w + j + 1
+                    progress = f'{round(current_px / total_px * 100, 2)}%'
+                    print(f'\rФормирование матрицы: {progress:<7}', end='')
+        if disp:
+            print()
+
+        # Отрисовка смайликов для каждого стиля по отдельности
+        # (потому что если это делать в одном цикле, это будет намного дольше)
+        for style_index, style_name in enumerate(emoji_style):
+            with Pilmoji(result_image, source=get_emoji_style(style_name)) as pilmoji:
+                for i in range(img_h):
+                    for j in range(img_w):
+                        if style_matrix[i, j] == style_name:
+                            # Индексы пикселей в итоговой картинке
+                            h, w = i * emoji_resolution, j * emoji_resolution
+                            pilmoji.text((w, h), emoji_matrix[i, j], font=font)
+
+                        # Вывод прогресса
+                        if disp:
+                            total_iters = img_h * img_w * len(emoji_style)
+                            current_iter = style_index * img_h * img_w + i * img_w + j + 1
+                            progress = f'{round(current_iter / total_iters * 100, 2)}%'
+                            print(f'\rРисование: {progress:<7}', end='')
+        if disp:
+            print()
 
     # Сохранение картинки в виде текста
     if save_as_text:
-        with open(f'output/{save_image_name}.txt', 'w') as file:
-            file.write(emoji_image_text)
+        save_matrix_as_text(emoji_matrix, save_image_name)
     
     # Сохранение изображения
     result_image.save(f'output/{save_image_name}.png')
