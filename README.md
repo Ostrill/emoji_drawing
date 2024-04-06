@@ -15,7 +15,7 @@
 Используемые сторонние библиотеки:
 - [NumPy](https://numpy.org/) - для работы с массивами;
 - [Pillow](https://pillow.readthedocs.io/en/stable/) - для работы с изображениями;
-- [Pilmoji](https://github.com/jay3332/pilmoji) - для рисования смайликов в Pillow;
+- [Pilmoji](https://github.com/jay3332/pilmoji) - для рисования смайликов в Pillow.
 
 # Структура репозитория
 

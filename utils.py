@@ -232,7 +232,7 @@ def draw(image_filename,
          background_color=(0, 0, 0),
          emojis=None, 
          emoji_dict_name='classic_black',
-         emoji_style='twitter',
+         emoji_style='google',
          dynamic_background=False,
          save_as_text=True,
          disp=True):
