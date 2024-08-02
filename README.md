@@ -1,3 +1,7 @@
+> Этот репозиторий устарел, лучше воспользуйтесь его [обновленной версией](https://github.com/Ostrill/emoji)!
+
+> This repository is outdated, better use its [updated version](https://github.com/Ostrill/emoji)!
+
 # Рисование картинок из смайликов
 
 Способ построения картинки из смайликов:
